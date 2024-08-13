@@ -9,10 +9,45 @@
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
 //+------------------------------------------------------------------+
+#include <Trade\Trade.mqh>;
+#include <Trade\PositionInfo.mqh>
+#include <Trade\OrderInfo.mqh>
+COrderInfo order;
+CPositionInfo Posicion;
+CTrade trade;
+// Inputs
+input int start_hour = 2;
+input int start_minute = 15;
+input int end_hour = 7;
+input int end_minute = 15;
+
+// Variables
+MqlDateTime now;
+datetime start_time = 0;
+datetime end_time = 0;
+double high_level_range = 0;
+double low_level_range = 0;
+double range_size = 0;
+
+// Handlers
+int handlerATR;
+
+// Buffers
+double atr[];
+double high_range[];
+double low_range[];
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 int OnInit()
   {
 //---
-   
+   ArraySetAsSeries(atr, true);
+   ArraySetAsSeries(high_range, true);
+   ArraySetAsSeries(low_range, true);
+
+   handlerATR = iATR(_Symbol,PERIOD_CURRENT,14);
 //---
    return(INIT_SUCCEEDED);
   }
@@ -22,7 +57,7 @@ int OnInit()
 void OnDeinit(const int reason)
   {
 //---
-   
+
   }
 //+------------------------------------------------------------------+
 //| Expert tick function                                             |
@@ -30,6 +65,108 @@ void OnDeinit(const int reason)
 void OnTick()
   {
 //---
-   
+   ArrayResize(atr,10);
+   CopyBuffer(handlerATR,0,0,10,atr);
+
+   TimeCurrent(now); // Calcular el dia de hoy
+   if(now.hour == end_hour && now.min == end_minute+1 && now.sec == 0 && end_time != StructToTime(now))
+     {
+      // Analizamos el rango que hay entre las dos franjas horarias predefinidas en las INPUTS
+      MqlDateTime start_tmp;
+      start_tmp.year= now.year;
+      start_tmp.mon = now.mon;
+      start_tmp.day = now.day;
+      start_tmp.hour= start_hour;
+      start_tmp.min = start_minute;
+      start_tmp.sec = 0;
+
+      MqlDateTime end_tmp;
+      end_tmp.year= now.year;
+      end_tmp.mon = now.mon;
+      end_tmp.day = now.day;
+      end_tmp.hour= end_hour;
+      end_tmp.min = end_minute;
+      end_tmp.sec = 0;
+
+      start_time = StructToTime(start_tmp);
+      end_time = StructToTime(end_tmp);
+
+      // Dimensionamos los arrays a la medida justa de las velas que van a tener lugar.
+      ArrayResize(high_range, Bars(_Symbol,PERIOD_CURRENT,start_time, end_time));
+      ArrayResize(low_range, Bars(_Symbol,PERIOD_CURRENT,start_time, end_time));
+
+      CopyHigh(_Symbol,PERIOD_CURRENT,start_time, end_time, high_range);
+      CopyLow(_Symbol,PERIOD_CURRENT,start_time, end_time, low_range);
+
+      // Extraemos los extremos del rango.
+      high_level_range = high_range[ArrayMaximum(high_range,0)];
+      low_level_range = low_range[ArrayMinimum(low_range,0)];
+
+      ObjectCreate(0, "RANGE", OBJ_RECTANGLE, 0, start_time, high_level_range, end_time, low_level_range);
+
+      if(SymbolInfoDouble(_Symbol, SYMBOL_LAST) < high_level_range && SymbolInfoDouble(_Symbol, SYMBOL_LAST) > low_level_range)
+        {
+         // El precio esta dentro del rango. Posicionamos las ordenes.
+
+         trade.BuyStop(1,high_level_range,_Symbol,low_level_range,NormalizeDouble(high_level_range + range_size, Digits()),ORDER_TIME_GTC,0,"Buy stop from range");
+         trade.SellStop(1,low_level_range,_Symbol,high_level_range,NormalizeDouble(low_level_range - range_size, Digits()),ORDER_TIME_GTC,0,"Sell stop from range");
+
+        }
+
+
+
+     }
+
+   bool active_trade = PositionSelect(_Symbol);
+
+   if(active_trade == true)
+     {
+      // Cerrar las ordenes pendientes si ya se ha ejecutado una.
+      PendingOrderDelete();
+     }
+
+
+
   }
 //+------------------------------------------------------------------+
+
+// Calcula la dimensión de la posición que va a ejecutar para mantener al gestión del riesgo.
+void calculateLots()
+  {
+//---
+
+  }
+
+//+------------------------------------------------------------------+
+//| Delete all pending orders                                        |
+//+------------------------------------------------------------------+
+void DeleteAllPendingOrders(void)
+  {
+   for(int i=OrdersTotal()-1; i>=0; i--)  // returns the number of current orders
+     {
+      if(order.SelectByIndex(i))      // selects the pending order by index for further access to its properties
+        {
+         if(order.Symbol()==_Symbol)
+           {
+            trade.OrderDelete(order.Ticket());
+           }
+        }
+     }
+  }
+//+------------------------------------------------------------------+
+
+void PendingOrderDelete() 
+{  
+         
+         int o_total=OrdersTotal();
+         for(int j=o_total-1; j>=0; j--)
+         {
+            ulong o_ticket = OrderGetTicket(j);
+            if(o_ticket != 0)
+            {
+             // delete the pending order
+             trade.OrderDelete(o_ticket);
+             Print("Pending order deleted sucessfully!");
+          }
+      }     
+}
