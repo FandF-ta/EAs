@@ -16,10 +16,15 @@ COrderInfo order;
 CPositionInfo Posicion;
 CTrade trade;
 // Inputs
-input int start_hour = 2;
-input int start_minute = 15;
-input int end_hour = 7;
-input int end_minute = 15;
+input int start_hour = 3;
+input int start_minute = 5;
+input int end_hour = 6;
+input int end_minute = 5;
+input int ATR_PERIOD = 14;
+input int CLOSE_POSITION_HOUR = 17;
+input int CLOSE_POSITION_MIN = 0;
+input double TP_MUL_RATIO = 0.3;
+input double SL_MUL_RATIO = 2.0;
 
 // Variables
 MqlDateTime now;
@@ -47,7 +52,7 @@ int OnInit()
    ArraySetAsSeries(high_range, true);
    ArraySetAsSeries(low_range, true);
 
-   handlerATR = iATR(_Symbol,PERIOD_CURRENT,14);
+   handlerATR = iATR(_Symbol,PERIOD_CURRENT,ATR_PERIOD);
 //---
    return(INIT_SUCCEEDED);
   }
@@ -68,8 +73,11 @@ void OnTick()
    ArrayResize(atr,10);
    CopyBuffer(handlerATR,0,0,10,atr);
 
+   bool active_trade = PositionSelect(_Symbol);
+
    TimeCurrent(now); // Calcular el dia de hoy
-   if(now.hour == end_hour && now.min == end_minute+1 && now.sec == 0 && end_time != StructToTime(now))
+
+   if(active_trade == false && now.hour == end_hour && now.min == end_minute+1 && now.sec == 0 && end_time != StructToTime(now))
      {
       // Analizamos el rango que hay entre las dos franjas horarias predefinidas en las INPUTS
       MqlDateTime start_tmp;
@@ -101,6 +109,7 @@ void OnTick()
       // Extraemos los extremos del rango.
       high_level_range = high_range[ArrayMaximum(high_range,0)];
       low_level_range = low_range[ArrayMinimum(low_range,0)];
+      range_size = high_level_range - low_level_range;
 
       ObjectCreate(0, "RANGE", OBJ_RECTANGLE, 0, start_time, high_level_range, end_time, low_level_range);
 
@@ -108,25 +117,24 @@ void OnTick()
         {
          // El precio esta dentro del rango. Posicionamos las ordenes.
 
-         trade.BuyStop(1,high_level_range,_Symbol,low_level_range,NormalizeDouble(high_level_range + range_size, Digits()),ORDER_TIME_GTC,0,"Buy stop from range");
-         trade.SellStop(1,low_level_range,_Symbol,high_level_range,NormalizeDouble(low_level_range - range_size, Digits()),ORDER_TIME_GTC,0,"Sell stop from range");
+         trade.BuyStop(1,high_level_range,_Symbol,NormalizeDouble(high_level_range - range_size*SL_MUL_RATIO, Digits()),NormalizeDouble((high_level_range + range_size*TP_MUL_RATIO), Digits()),ORDER_TIME_GTC,NULL,"Buy stop from range");
+         trade.SellStop(1,low_level_range,_Symbol,NormalizeDouble(low_level_range + range_size*SL_MUL_RATIO, Digits()),NormalizeDouble((low_level_range - range_size*TP_MUL_RATIO), Digits()),ORDER_TIME_GTC,NULL,"Sell stop from range");
 
         }
-
-
-
      }
-
-   bool active_trade = PositionSelect(_Symbol);
 
    if(active_trade == true)
      {
       // Cerrar las ordenes pendientes si ya se ha ejecutado una.
       PendingOrderDelete();
+
      }
-
-
-
+   /*
+   if (now.hour == CLOSE_POSITION_HOUR && now.min == CLOSE_POSITION_MIN) {
+         trade.PositionClose(_Symbol);
+         PendingOrderDelete();
+      }
+   */
   }
 //+------------------------------------------------------------------+
 
@@ -155,18 +163,22 @@ void DeleteAllPendingOrders(void)
   }
 //+------------------------------------------------------------------+
 
-void PendingOrderDelete() 
-{  
-         
-         int o_total=OrdersTotal();
-         for(int j=o_total-1; j>=0; j--)
-         {
-            ulong o_ticket = OrderGetTicket(j);
-            if(o_ticket != 0)
-            {
-             // delete the pending order
-             trade.OrderDelete(o_ticket);
-             Print("Pending order deleted sucessfully!");
-          }
-      }     
-}
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+void PendingOrderDelete()
+  {
+
+   int o_total=OrdersTotal();
+   for(int j=o_total-1; j>=0; j--)
+     {
+      ulong o_ticket = OrderGetTicket(j);
+      if(o_ticket != 0)
+        {
+         // delete the pending order
+         trade.OrderDelete(o_ticket);
+         Print("Pending order deleted sucessfully!");
+        }
+     }
+  }
+//+------------------------------------------------------------------+
