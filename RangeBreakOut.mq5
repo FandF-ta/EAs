@@ -15,14 +15,25 @@
 COrderInfo order;
 CPositionInfo Posicion;
 CTrade trade;
+
+// Definitions and Enums
+enum tipeOfBehaviour {
+   TREND = 0,
+   REVERSAL = 1,
+};
 // Inputs
+input int ATR_PERIOD = 7;
+input tipeOfBehaviour BOT_BEHAVIOUR = TREND;
+
+input group "Time Assignment"
 input int start_hour = 3;
 input int start_minute = 5;
 input int end_hour = 6;
 input int end_minute = 5;
-input int ATR_PERIOD = 14;
 input int CLOSE_POSITION_HOUR = 17;
 input int CLOSE_POSITION_MIN = 0;
+
+input group "R/R Ratios"
 input double TP_MUL_RATIO = 0.3;
 input double SL_MUL_RATIO = 2.0;
 
@@ -52,7 +63,7 @@ int OnInit()
    ArraySetAsSeries(high_range, true);
    ArraySetAsSeries(low_range, true);
 
-   handlerATR = iATR(_Symbol,PERIOD_CURRENT,ATR_PERIOD);
+   handlerATR = iATR(_Symbol,PERIOD_D1,ATR_PERIOD);
 //---
    return(INIT_SUCCEEDED);
   }
@@ -116,25 +127,31 @@ void OnTick()
       if(SymbolInfoDouble(_Symbol, SYMBOL_LAST) < high_level_range && SymbolInfoDouble(_Symbol, SYMBOL_LAST) > low_level_range)
         {
          // El precio esta dentro del rango. Posicionamos las ordenes.
-
+         if (BOT_BEHAVIOUR == TREND) {
          trade.BuyStop(1,high_level_range,_Symbol,NormalizeDouble(high_level_range - range_size*SL_MUL_RATIO, Digits()),NormalizeDouble((high_level_range + range_size*TP_MUL_RATIO), Digits()),ORDER_TIME_GTC,NULL,"Buy stop from range");
          trade.SellStop(1,low_level_range,_Symbol,NormalizeDouble(low_level_range + range_size*SL_MUL_RATIO, Digits()),NormalizeDouble((low_level_range - range_size*TP_MUL_RATIO), Digits()),ORDER_TIME_GTC,NULL,"Sell stop from range");
-
+         }
+         
+         if (BOT_BEHAVIOUR == REVERSAL) {
+         trade.BuyLimit(1,low_level_range,_Symbol,NormalizeDouble(low_level_range - range_size*SL_MUL_RATIO, Digits()),NormalizeDouble((high_level_range + range_size*TP_MUL_RATIO), Digits()),ORDER_TIME_GTC,NULL,"Buy Limit from range");
+         trade.SellLimit(1,high_level_range,_Symbol,NormalizeDouble(high_level_range + range_size*SL_MUL_RATIO, Digits()),NormalizeDouble((low_level_range - range_size*TP_MUL_RATIO), Digits()),ORDER_TIME_GTC,NULL,"Sell Limit from range");
+         }
+         
         }
      }
 
    if(active_trade == true)
      {
       // Cerrar las ordenes pendientes si ya se ha ejecutado una.
-      PendingOrderDelete();
+      //PendingOrderDelete();
 
      }
-   /*
+   
    if (now.hour == CLOSE_POSITION_HOUR && now.min == CLOSE_POSITION_MIN) {
          trade.PositionClose(_Symbol);
          PendingOrderDelete();
       }
-   */
+   
   }
 //+------------------------------------------------------------------+
 
