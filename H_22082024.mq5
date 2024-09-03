@@ -54,7 +54,7 @@ void OnTick()
 //+------------------------------------------------------------------+
 
 // Función para crear el perfil de mercado
-void CreateMarketProfile(MqlRates rates[], int count, MarketProfile &profile[], int &profile_count)
+void CreateMarketProfile(MqlRates &rates[], int count, MarketProfile &profile[], int &profile_count)
 {
    // Map para acumular el volumen por precio de cierre
    double volume_by_price[];
@@ -87,7 +87,7 @@ void CreateMarketProfile(MqlRates rates[], int count, MarketProfile &profile[], 
 }
 
 // Función para obtener la zona de máximo volumen
-bool GetMaxVolZone(MarketProfile profile[], int profile_count, double threshold, double &zone_low, double &zone_high)
+bool GetMaxVolZone(MarketProfile &profile[], int profile_count, double threshold, double &zone_low, double &zone_high)
 {
    int start = -1, max_size = 0;
    int range_start = -1, range_end = -1;
