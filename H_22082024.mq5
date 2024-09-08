@@ -47,12 +47,30 @@ void OnTick()
   {
 
    MqlDateTime temp_now;
-   TimeCurrent(temp_now);
+   TimeTradeServer(temp_now);
 
-   if(temp_now.hour == 0 && temp_now.min == 00 && temp_now.sec == 01)
+   if(temp_now.hour == 1 && temp_now.min == 00 && temp_now.sec == 01)
      {
       //Print("OUT: yesterdayPOC2() ", yesterdayPOC2());
       //Print("OUT: GetYesterdayPOC(_Symbol) ", GetYesterdayPOC(_Symbol));
+      if (PositionSelect(_Symbol)) {
+         trade.PositionClose(_Symbol);
+      }
+      double poc = NormalizePrice(GetYesterdayPOC(_Symbol));
+      double open = iOpen(_Symbol,PERIOD_D1,0);
+      
+      
+      if (SymbolInfoDouble(_Symbol,SYMBOL_LAST) < poc) {
+         double SL = open - (poc - SymbolInfoDouble(_Symbol,SYMBOL_LAST));
+         trade.Buy(1,_Symbol,open,NormalizePrice(SL),poc,"Buy order");
+      }
+      if (SymbolInfoDouble(_Symbol,SYMBOL_LAST) > poc) {
+         double SL = open - (SymbolInfoDouble(_Symbol,SYMBOL_LAST) - poc);
+         trade.Sell(1,_Symbol,open,NormalizePrice(SL),poc,"Sell order");
+      }
+      
+      
+      /*
       socket=SocketCreate();
       if(socket!=INVALID_HANDLE)
         {
@@ -70,11 +88,20 @@ void OnTick()
          SocketClose(socket);
         }
       else
-         Print("Socket creation error ",GetLastError());
+         Print("Socket creation error ",GetLastError()); */
      }
   }
 
 //+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+double NormalizePrice(double price)
+  {
+   double m_tick_size=SymbolInfoDouble(_Symbol,SYMBOL_TRADE_TICK_SIZE);
+   return(NormalizeDouble(MathRound(price/m_tick_size)*m_tick_size,_Digits));
+  }
 
 //+------------------------------------------------------------------+
 //|                                                                  |
