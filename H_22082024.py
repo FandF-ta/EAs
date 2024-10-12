@@ -3,20 +3,24 @@ import pandas as pd
 import numpy as np
 import MetaTrader5 as mt5
 import pytz
-from datetime import datetime
-import matplotlib.pyplot as plt
-import json
-import plotly.express as px
-import plotly.graph_objects as go
+from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import MinMaxScaler
-from datetime import timedelta
+# windows_service.py
+import win32serviceutil
+import win32service
+import win32event
+import servicemanager
+import os
+import sys
+import time
+import logging
+
 
 #PARAMETERS
 STD_MULTIPLIER = 1
 ticker = "ES_U"
-
 
 def create_market_profile(data, getPOC=True):
     profile = data.groupby('close')['tick_volume'].sum().reset_index()
@@ -160,16 +164,61 @@ def calculate_PHF(mt5, date, flag_full_session = True):
         #}
         phf = cluster_centers
 
-    return phf
+    return phf 
 
+class MyService(win32serviceutil.ServiceFramework):
+    _svc_name_ = "PHF & POC Serve Sript"
+    _svc_display_name_ = "F&F PHF and POC server"
+    _svc_description_ = "Advanced analysis tool for intraday trading."
 
-if __name__=="__main__":
-    # connect to MetaTrader 5
-    if not mt5.initialize():
-        print("initialize() failed")
-        mt5.shutdown()
+    def __init__(self, args):
+        win32serviceutil.ServiceFramework.__init__(self, args)
+        self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
+        self.running = True
 
-    # MAIN PROGRAM
-    phf = calculate_PHF(mt5)
+    def SvcStop(self):
+        self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
+        win32event.SetEvent(self.hWaitStop)
+        self.running = False
 
-    mt5.shutdown()
+    def SvcDoRun(self):
+        servicemanager.LogMsg(servicemanager.EVENTLOG_INFORMATION_TYPE, servicemanager.PYS_SERVICE_STARTED,
+                              (self._svc_name_, ""))
+        self.main()
+
+    def main(self): #MAIN SCRIPT
+
+        logging.basicConfig(filename='phf_poc_fnf_service.log', level=logging.INFO)
+                
+        # Main loop to check time every minute
+        while self.running:
+            current_time = datetime.now()
+            
+            # Calculate time to the next midnight
+            next_midnight = (current_time + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            time_to_midnight = (next_midnight - current_time).total_seconds()
+            
+            # Wait until midnight (or stop if the service is interrupted)
+            logging.info(f"Waiting until midnight: {next_midnight}")
+            result = win32event.WaitForSingleObject(self.hWaitStop, int(time_to_midnight * 1000))  # Convert seconds to milliseconds
+
+            if result == win32event.WAIT_OBJECT_0:
+                break  # Service is stopping
+      
+            # connect to MetaTrader 5
+            if not mt5.initialize():
+                print("initialize() failed")
+                mt5.shutdown()
+
+            # MAIN PROGRAM
+            phf = calculate_PHF(mt5)
+            mt5.shutdown()
+
+if __name__ == '__main__':
+    if len(sys.argv) == 1:
+        servicemanager.Initialize()
+        servicemanager.PrepareToHostSingle(MyService)
+        servicemanager.StartServiceCtrlDispatcher()
+        win32serviceutil.HandleCommandLine(MyService)
+    else:
+        win32serviceutil.HandleCommandLine(MyService)
